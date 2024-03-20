@@ -4,7 +4,9 @@
 
 module Main where
 
+import Control.Concurrent
 import Control.Monad
+import Control.Monad.IO.Class
 import Data.Aeson
 import Data.Map.Strict qualified as M
 import Data.String
@@ -48,10 +50,14 @@ main = do
       addroute (unMethod responseMethod) (fromString path) $ do
         status (unStatus responseStatus)
 
-        case responseBody of
+        case responseDelay of
           Nothing -> mempty
-          Just b -> json b
+          Just d -> liftIO $ threadDelay d
 
         case responseHeaders of
           Nothing -> mempty
           Just hs -> forM_ (M.toList hs) (uncurry addHeader)
+
+        case responseBody of
+          Nothing -> mempty
+          Just b -> json b

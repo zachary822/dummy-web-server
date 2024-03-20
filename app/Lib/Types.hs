@@ -18,6 +18,7 @@ type Paths = Map String PathConfig
 data PathConfig = PathConfig
   { responseMethod :: HTTPMethod
   , responseStatus :: !HTTPStatus
+  , responseDelay :: !(Maybe Int)
   , responseBody :: !(Maybe Value)
   , responseHeaders :: !(Maybe (Map TL.Text TL.Text))
   }
@@ -28,6 +29,7 @@ instance FromJSON PathConfig where
     PathConfig
       <$> o .: "method"
       <*> o .: "status"
+      <*> o .:? "delay"
       <*> o .:? "body"
       <*> o .:? "headers"
 

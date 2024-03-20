@@ -1,9 +1,0 @@
-{
-  "/": {
-    "method": "post",
-    "status": 400,
-    "body": {
-      "yay": 1
-    }
-  }
-}
