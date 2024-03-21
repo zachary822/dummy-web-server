@@ -1,7 +1,6 @@
 name: build
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 concurrency:
   group: build-${{ github.ref }}
@@ -74,4 +73,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: executables-${{ runner.os }}
-          path: dist/dummy-web-server
+          path: dist/*
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      
