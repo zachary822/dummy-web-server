@@ -68,7 +68,7 @@ executable dummy-web-server
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:    base ^>=4.19.1.0,
+    build-depends:    base >=4.19.1.0 && <5,
                       scotty,
                       aeson,
                       optparse-applicative,
