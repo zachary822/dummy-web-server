@@ -47,8 +47,11 @@ main = do
     middleware logStdoutDev
 
     forM_ (M.toList pc) $ \(path, PathConfig{..}) -> do
-      addroute (unMethod responseMethod) (fromString path) $ do
-        status (unStatus responseStatus)
+      let addroute' = maybe matchAny (addroute . unMethod) responseMethod
+      addroute' (fromString path) $ do
+        case responseStatus of
+          Nothing -> mempty
+          Just s -> status $ unStatus s
 
         case responseDelay of
           Nothing -> mempty
