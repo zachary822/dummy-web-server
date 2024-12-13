@@ -8,9 +8,11 @@ import Control.Concurrent
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
+import Data.ByteString (ByteString)
 import Data.Map.Strict qualified as M
 import Data.String
 import Lib.Types
+import Network.Wai.Middleware.Cors
 import Network.Wai.Middleware.RequestLogger
 import Options.Applicative
 import Web.Scotty
@@ -18,6 +20,7 @@ import Web.Scotty
 data Config = Config
   { port :: Int
   , configPath :: FilePath
+  , origins :: [ByteString]
   }
   deriving (Show, Eq)
 
@@ -32,19 +35,40 @@ configParser =
           <> showDefault
           <> value 3000
       )
-    <*> argument str (metavar "FILE")
+    <*> strOption
+      ( long "config"
+          <> short 'c'
+          <> metavar "FILE"
+      )
+    <*> ( many $
+            strOption
+              ( long "allowed-origin"
+                  <> short 'a'
+              )
+        )
 
 main :: IO ()
 main = do
-  Config{..} <- execParser $ info (configParser <**> helper) (fullDesc <> progDesc "Dummy web server")
+  Config{..} <-
+    execParser $
+      info (configParser <**> helper) (fullDesc <> progDesc "Dummy web server")
 
   pc :: Paths <-
-    eitherDecodeFileStrict configPath >>= \case
-      Left e -> fail e
-      Right c -> return c
+    eitherDecodeFileStrict configPath >>= either fail return
+
+  let corsOrigins = if null origins then Nothing else Just (origins, True)
 
   scotty port $ do
     middleware logStdoutDev
+    middleware $
+      cors $
+        const $
+          Just
+            simpleCorsResourcePolicy
+              { corsRequestHeaders = ["Authorization"]
+              , corsMethods = ["GET", "POST", "PUT", "HEAD", "DELETE", "OPTIONS"]
+              , corsOrigins = corsOrigins
+              }
 
     forM_ (M.toList pc) $ \(path, PathConfig{..}) -> do
       let addroute' = maybe matchAny (addroute . unMethod) responseMethod

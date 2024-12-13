@@ -76,7 +76,9 @@ executable dummy-web-server
                       containers,
                       text,
                       http-types,
-                      scientific
+                      scientific,
+                      wai-cors,
+                      bytestring
 
     -- Directories containing source files.
     hs-source-dirs:   app
