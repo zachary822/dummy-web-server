@@ -9,7 +9,9 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
 import Data.ByteString (ByteString)
+import Data.Foldable (sequenceA_, traverse_)
 import Data.Map.Strict qualified as M
+import Data.Maybe (catMaybes)
 import Data.String
 import Lib.Types
 import Network.Wai.Middleware.Cors
@@ -73,18 +75,10 @@ main = do
     forM_ (M.toList pc) $ \(path, PathConfig{..}) -> do
       let addroute' = maybe matchAny (addroute . unMethod) responseMethod
       addroute' (fromString path) $ do
-        case responseStatus of
-          Nothing -> mempty
-          Just s -> status $ unStatus s
-
-        case responseDelay of
-          Nothing -> mempty
-          Just d -> liftIO $ threadDelay d
-
-        case responseHeaders of
-          Nothing -> mempty
-          Just hs -> forM_ (M.toList hs) (uncurry addHeader)
-
-        case responseBody of
-          Nothing -> mempty
-          Just b -> json b
+        sequenceA_ $
+          catMaybes
+            [ liftIO . threadDelay <$> responseDelay
+            , status . unStatus <$> responseStatus
+            , traverse_ (uncurry addHeader) . M.toList <$> responseHeaders
+            , json <$> responseBody
+            ]
