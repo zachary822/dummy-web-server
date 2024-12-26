@@ -10,9 +10,11 @@ import Control.Monad.IO.Class
 import Data.Aeson
 import Data.ByteString (ByteString)
 import Data.Foldable (sequenceA_, traverse_)
+import Data.Functor
 import Data.Map.Strict qualified as M
 import Data.Maybe (catMaybes)
 import Data.String
+import Data.Text.Lazy qualified as TL
 import Lib.Types
 import Network.Wai.Middleware.Cors
 import Network.Wai.Middleware.RequestLogger
@@ -36,16 +38,19 @@ configParser =
           <> metavar "PORT"
           <> showDefault
           <> value 3000
+          <> help "listening port"
       )
     <*> strOption
       ( long "config"
           <> short 'c'
           <> metavar "FILE"
+          <> help "config file path"
       )
     <*> ( many $
             strOption
               ( long "allowed-origin"
                   <> short 'a'
+                  <> help "allowed CORS origins"
               )
         )
 
@@ -80,5 +85,7 @@ main = do
             [ liftIO . threadDelay <$> responseDelay
             , status . unStatus <$> responseStatus
             , traverse_ (uncurry addHeader) . M.toList <$> responseHeaders
-            , json <$> responseBody
+            , responseBody <&> \case
+                String t -> text (TL.fromStrict t)
+                v -> json v
             ]
