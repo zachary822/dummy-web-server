@@ -19,7 +19,9 @@ import Data.String
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Lazy qualified as TL
+import Lib.Common.Types
 import Lib.OpenApi.Types as O
+import Lib.Path.Types
 import Lib.Swagger
 import Lib.Types
 import Network.HTTP.Types (StdMethod (HEAD, TRACE))
@@ -85,11 +87,8 @@ main = do
                   , corsMethods = ["GET", "POST", "PUT", "HEAD", "DELETE", "OPTIONS"]
                   , corsOrigins = corsOrigins
                   }
-
-  if openApi
-    then do
-      OpenApi{..} <-
-        eitherDecodeFileStrict configPath >>= either fail return
+  eitherDecodeFileStrict configPath >>= either fail return >>= \case
+    OpenApiConf OpenApi{..} -> do
       let Components{..} = components
       unless
         (openapi < Version (3, 2, 0) && openapi >= Version (3, 1, 0))
@@ -144,10 +143,7 @@ main = do
                                 setHeader "Content-Type" (TL.fromStrict mt)
                           (_, Nothing) -> mempty
               (_, Nothing) -> mempty
-    else do
-      pc :: Paths <-
-        eitherDecodeFileStrict configPath >>= either fail return
-
+    PathConf pc -> do
       scotty port $ do
         mws
 
