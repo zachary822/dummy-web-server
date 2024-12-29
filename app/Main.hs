@@ -15,6 +15,7 @@ import Data.Functor
 import Data.List.NonEmpty qualified as N
 import Data.Map.Strict qualified as M
 import Data.Maybe (catMaybes, fromMaybe)
+import Data.Scientific
 import Data.String
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -28,6 +29,7 @@ import Network.HTTP.Types (StdMethod (HEAD, TRACE))
 import Network.Wai.Middleware.Cors
 import Network.Wai.Middleware.RequestLogger
 import Options.Applicative
+import System.Random.Stateful
 import Text.Blaze.Html.Renderer.Utf8
 import Text.Regex.TDFA
 import Web.Scotty as S
@@ -121,7 +123,7 @@ main = do
                                       setHeader "Content-Type" (TL.fromStrict mt)
                                       case (schemaLookup schemas schema) of
                                         Just s -> do
-                                          jsonFromSchema s >>= json
+                                          liftIO (jsonFromSchema s) >>= json
                                         Nothing -> fail "invalid schema"
                                 (_, Nothing) -> mempty
 
@@ -166,7 +168,13 @@ sanitizePath path = foldr (\m r -> T.replace m ((T.cons ':' . T.tail . T.init) m
  where
   matches = (getAllTextMatches (path =~ ("\\{[^}]+\\}" :: Text)) :: [Text])
 
-jsonFromSchema :: (MonadFail m) => SchemaObject -> m Value
+chars :: [Char]
+chars = ['A' .. 'Z'] ++ ['a' .. 'z'] ++ ['0' .. '9']
+
+genItems :: (MonadIO m) => Int -> [a] -> m ([a])
+genItems n cs = replicateM n ((cs !!) <$> uniformRM (0, length cs - 1) globalStdGen)
+
+jsonFromSchema :: SchemaObject -> IO Value
 jsonFromSchema (SchemaRef _) = fail "invalid reference"
 jsonFromSchema (SchemaObject props) =
   fromMaybe (Object mempty)
@@ -179,13 +187,15 @@ jsonFromSchema (SchemaObject props) =
 jsonFromSchema (SchemaArray item) =
   maybe (Array mempty) (Array . pure)
     <$> traverse jsonFromSchema item
-jsonFromSchema SchemaString = return $ String "yay"
+jsonFromSchema SchemaString =
+  String . T.pack
+    <$> genItems 20 chars
 jsonFromSchema SchemaNull = return Null
-jsonFromSchema SchemaNumber = return (Number 1.0)
-jsonFromSchema SchemaInteger = return (Number 1)
-jsonFromSchema SchemaBoolean = return (Bool True)
+jsonFromSchema SchemaNumber = Number . fromFloatDigits <$> uniformDouble01M globalStdGen
+jsonFromSchema SchemaInteger = Number . (fromIntegral @Int) <$> uniformM globalStdGen
+jsonFromSchema SchemaBoolean = Bool <$> uniformM globalStdGen
 jsonFromSchema (SchemaAnyOf schemas) = jsonFromSchema (N.head schemas)
 jsonFromSchema (SchemaOneOf schemas) = jsonFromSchema (N.head schemas)
 jsonFromSchema (SchemaAllOf schemas) = jsonFromSchema (N.head schemas)
-jsonFromSchema (SchemaNot SchemaNull) = return (String "yay")
+jsonFromSchema (SchemaNot SchemaNull) = String . T.pack <$> genItems 20 chars
 jsonFromSchema (SchemaNot _) = return Null
