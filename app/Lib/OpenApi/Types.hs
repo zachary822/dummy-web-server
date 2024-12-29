@@ -5,7 +5,6 @@
 module Lib.OpenApi.Types where
 
 import Control.Applicative
-import Control.Arrow (Arrow (second))
 import Data.Aeson
 import Data.Aeson.Types (Parser)
 import Data.Either
@@ -92,15 +91,11 @@ schemaLookup schemaContent (SchemaRef (Ref r)) =
       ref@(SchemaRef _) -> schemaLookup schemaContent ref
       s -> return s
 schemaLookup schemaContent (SchemaObject (Just props)) =
-  (M.fromList <$> mprops)
+  (sequenceA $ M.map (schemaLookup schemaContent) props)
     >>= return
       . SchemaObject
       . return
- where
-  mprops =
-    sequenceA $
-      (sequenceA . second (schemaLookup schemaContent)) <$> M.toList props
-schemaLookup _ (SchemaObject Nothing) = Nothing
+schemaLookup _ obj@(SchemaObject Nothing) = return obj
 schemaLookup schemaContent (SchemaArray (Just items)) = return (SchemaArray (schemaLookup schemaContent items))
 schemaLookup _ arr@(SchemaArray Nothing) = return arr
 schemaLookup _ SchemaNull = return SchemaNull
@@ -108,9 +103,9 @@ schemaLookup _ SchemaString = return SchemaString
 schemaLookup _ SchemaNumber = return SchemaNumber
 schemaLookup _ SchemaInteger = return SchemaInteger
 schemaLookup _ SchemaBoolean = return SchemaBoolean
-schemaLookup schemaContent (SchemaAllOf items) = SchemaAllOf <$> sequenceA (schemaLookup schemaContent <$> items)
-schemaLookup schemaContent (SchemaAnyOf items) = SchemaAnyOf <$> sequenceA (schemaLookup schemaContent <$> items)
-schemaLookup schemaContent (SchemaOneOf items) = SchemaOneOf <$> sequenceA (schemaLookup schemaContent <$> items)
+schemaLookup schemaContent (SchemaAllOf items) = SchemaAllOf <$> traverse (schemaLookup schemaContent) items
+schemaLookup schemaContent (SchemaAnyOf items) = SchemaAnyOf <$> traverse (schemaLookup schemaContent) items
+schemaLookup schemaContent (SchemaOneOf items) = SchemaOneOf <$> traverse (schemaLookup schemaContent) items
 schemaLookup schemaContent (SchemaNot item) = SchemaNot <$> (schemaLookup schemaContent item)
 
 data PathItemObject

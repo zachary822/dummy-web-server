@@ -9,13 +9,12 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
 import Data.Aeson.Key (fromText)
-import Data.Aeson.Types (Pair, listValue)
 import Data.ByteString (ByteString)
 import Data.Foldable (sequenceA_, traverse_)
 import Data.Functor
-import Data.List.NonEmpty as N
+import Data.List.NonEmpty qualified as N
 import Data.Map.Strict qualified as M
-import Data.Maybe (catMaybes)
+import Data.Maybe (catMaybes, fromMaybe)
 import Data.String
 import Data.Text (Text)
 import Data.Text qualified as T
@@ -123,7 +122,7 @@ main = do
                                     case (schemaLookup schemas schema) of
                                       Just s -> do
                                         jsonFromSchema s >>= json
-                                      Nothing -> mempty
+                                      Nothing -> fail "invalid schema"
                               (_, Nothing) -> mempty
 
                 prepareOp get getOp
@@ -164,7 +163,6 @@ main = do
                     String t -> text (TL.fromStrict t)
                     v -> json v
                 ]
- where
 
 sanitizePath :: Text -> Text
 sanitizePath path = foldr (\m r -> T.replace m ((T.cons ':' . T.tail . T.init) m) r) path matches
@@ -174,15 +172,16 @@ sanitizePath path = foldr (\m r -> T.replace m ((T.cons ':' . T.tail . T.init) m
 jsonFromSchema :: (MonadFail m) => SchemaObject -> m Value
 jsonFromSchema (SchemaRef _) = fail "invalid reference"
 jsonFromSchema (SchemaObject props) =
-  (maybe (object []) object <$>) . sequenceA $
-    sequenceA
-      . M.foldlWithKey
-        (\a k v -> (((fromText k .=) :: Value -> Pair) <$> jsonFromSchema v) : a)
-        []
-      <$> props
+  fromMaybe (Object mempty)
+    <$> traverse
+      ( fmap (object . M.foldlWithKey (\a k v -> (fromText k, v) : a) [])
+          . sequenceA
+          . M.map jsonFromSchema
+      )
+      props
 jsonFromSchema (SchemaArray item) =
-  (maybe (Array mempty) (listValue id . (: [])) <$>) . sequenceA $
-    jsonFromSchema <$> item
+  maybe (Array mempty) (Array . pure)
+    <$> traverse jsonFromSchema item
 jsonFromSchema SchemaString = return $ String "yay"
 jsonFromSchema SchemaNull = return Null
 jsonFromSchema SchemaNumber = return (Number 1.0)
