@@ -3,13 +3,13 @@
 
 module Main where
 
+import Control.Arrow
 import Control.Concurrent
 import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
 import Data.Aeson.Key (fromText)
 import Data.Aeson.Types (Pair, listValue)
-import Data.Bifunctor
 import Data.ByteString (ByteString)
 import Data.Foldable (sequenceA_, traverse_)
 import Data.Functor
@@ -107,25 +107,25 @@ main = do
           raw $ renderHtml (swaggerPage "/openapi.json")
 
         forM_ (M.toList paths) $
-          ( \case
+          second (pathLookup pathItems)
+            >>> \case
               (path, Just (PathItem{..})) -> do
                 let prepareOp verb op =
                       flip (maybe mempty) op $
                         \(OperationObject resp) ->
                           forM_ (M.toList resp) $
-                            ( \case
-                                (sts, Just (Response{..})) ->
-                                  forM_ (M.toList content) $ \(mt, MediaTypeObject schema) ->
-                                    verb (Capture (sanitizePath path)) $ do
-                                      status (getStatus sts)
-                                      setHeader "Content-Type" (TL.fromStrict mt)
-                                      case (schemaLookup schemas schema) of
-                                        Just s -> do
-                                          jsonFromSchema s >>= json
-                                        Nothing -> mempty
-                                (_, Nothing) -> mempty
-                            )
-                              . (second (responseLookup responses))
+                            second (responseLookup responses) >>> \case
+                              (sts, Just (Response{..})) ->
+                                forM_ (M.toList content) $ \(mt, MediaTypeObject schema) ->
+                                  verb (Capture (sanitizePath path)) $ do
+                                    status (getStatus sts)
+                                    setHeader "Content-Type" (TL.fromStrict mt)
+                                    case (schemaLookup schemas schema) of
+                                      Just s -> do
+                                        jsonFromSchema s >>= json
+                                      Nothing -> mempty
+                              (_, Nothing) -> mempty
+
                 prepareOp get getOp
                 prepareOp put putOp
                 prepareOp post postOp
@@ -136,18 +136,15 @@ main = do
                 flip (maybe mempty) headOp $
                   \(OperationObject resp) ->
                     forM_ (M.toList resp) $
-                      ( \case
+                      second (responseLookup responses)
+                        >>> \case
                           (sts, Just (Response{..})) ->
                             forM_ (M.toList content) $ \(mt, _) ->
                               (addroute HEAD) (Capture (sanitizePath path)) $ do
                                 status (getStatus sts)
                                 setHeader "Content-Type" (TL.fromStrict mt)
                           (_, Nothing) -> mempty
-                      )
-                        . (second (responseLookup responses))
               (_, Nothing) -> mempty
-          )
-            . (second (pathLookup pathItems))
     else do
       pc :: Paths <-
         eitherDecodeFileStrict configPath >>= either fail return
