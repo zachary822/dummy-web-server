@@ -6,7 +6,7 @@ import Data.Aeson
 import Data.Map.Strict (Map)
 import Data.Text.Lazy qualified as TL
 import GHC.Generics
-import Lib.Types
+import Lib.Common.Types
 
 type Paths = Map String PathConfig
 

@@ -14,7 +14,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Read (decimal)
 import GHC.Generics (Generic)
-import Lib.Types
+import Lib.Common.Types
 import Network.HTTP.Types (Status, ok200)
 
 data OpenApi = OpenApi
@@ -91,7 +91,7 @@ schemaLookup schemaContent (SchemaRef (Ref r)) =
       ref@(SchemaRef _) -> schemaLookup schemaContent ref
       s -> return s
 schemaLookup schemaContent (SchemaObject (Just props)) =
-  (sequenceA $ M.map (schemaLookup schemaContent) props)
+  traverse (schemaLookup schemaContent) props
     >>= return
       . SchemaObject
       . return

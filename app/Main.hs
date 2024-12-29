@@ -180,8 +180,7 @@ jsonFromSchema (SchemaObject props) =
   fromMaybe (Object mempty)
     <$> traverse
       ( fmap (object . M.foldlWithKey (\a k v -> (fromText k, v) : a) [])
-          . sequenceA
-          . M.map jsonFromSchema
+          . traverse jsonFromSchema
       )
       props
 jsonFromSchema (SchemaArray item) =
