@@ -34,10 +34,9 @@ import Web.Scotty as S
 import Web.Scotty.Internal.Types (RoutePattern (Capture))
 
 data Config = Config
-  { port :: Int
-  , configPath :: FilePath
-  , origins :: [ByteString]
-  , openApi :: Bool
+  { port :: !Int
+  , configPath :: !FilePath
+  , origins :: ![ByteString]
   }
   deriving (Show, Eq)
 
@@ -66,7 +65,6 @@ configParser =
                   <> help "allowed CORS origins"
               )
         )
-    <*> switch (long "openapi" <> help "config is openapi format")
 
 main :: IO ()
 main = do
@@ -87,78 +85,81 @@ main = do
                   , corsMethods = ["GET", "POST", "PUT", "HEAD", "DELETE", "OPTIONS"]
                   , corsOrigins = corsOrigins
                   }
-  eitherDecodeFileStrict configPath >>= either fail return >>= \case
-    OpenApiConf OpenApi{..} -> do
-      let Components{..} = components
-      unless
-        (openapi < Version (3, 2, 0) && openapi >= Version (3, 1, 0))
-        (fail "unsupported openapi version")
 
-      scotty port $ do
-        mws
+  eitherDecodeFileStrict configPath
+    >>= either fail return
+    >>= \case
+      OpenApiConf OpenApi{..} -> do
+        let Components{..} = components
+        unless
+          (openapi < Version (3, 2, 0) && openapi >= Version (3, 1, 0))
+          (fail "unsupported openapi version")
 
-        get "/openapi.json" $ do
-          setHeader "Content-Type" "application/json"
-          file configPath
-        get "/docs" $ do
-          setHeader "Content-Type" "text/html"
-          raw $ renderHtml (swaggerPage "/openapi.json")
+        scotty port $ do
+          mws
 
-        forM_ (M.toList paths) $
-          second (pathLookup pathItems)
-            >>> \case
-              (path, Just (PathItem{..})) -> do
-                let prepareOp verb op =
-                      flip (maybe mempty) op $
-                        \(OperationObject resp) ->
-                          forM_ (M.toList resp) $
-                            second (responseLookup responses) >>> \case
-                              (sts, Just (Response{..})) ->
-                                forM_ (M.toList content) $ \(mt, MediaTypeObject schema) ->
-                                  verb (Capture (sanitizePath path)) $ do
-                                    status (getStatus sts)
-                                    setHeader "Content-Type" (TL.fromStrict mt)
-                                    case (schemaLookup schemas schema) of
-                                      Just s -> do
-                                        jsonFromSchema s >>= json
-                                      Nothing -> fail "invalid schema"
-                              (_, Nothing) -> mempty
+          get "/openapi.json" $ do
+            setHeader "Content-Type" "application/json"
+            file configPath
+          get "/docs" $ do
+            setHeader "Content-Type" "text/html"
+            raw $ renderHtml (swaggerPage "/openapi.json")
 
-                prepareOp get getOp
-                prepareOp put putOp
-                prepareOp post postOp
-                prepareOp delete deleteOp
-                prepareOp options optionsOp
-                prepareOp patch patchOp
-                prepareOp (addroute TRACE) traceOp
-                flip (maybe mempty) headOp $
-                  \(OperationObject resp) ->
-                    forM_ (M.toList resp) $
-                      second (responseLookup responses)
-                        >>> \case
-                          (sts, Just (Response{..})) ->
-                            forM_ (M.toList content) $ \(mt, _) ->
-                              (addroute HEAD) (Capture (sanitizePath path)) $ do
-                                status (getStatus sts)
-                                setHeader "Content-Type" (TL.fromStrict mt)
-                          (_, Nothing) -> mempty
-              (_, Nothing) -> mempty
-    PathConf pc -> do
-      scotty port $ do
-        mws
+          forM_ (M.toList paths) $
+            second (pathLookup pathItems)
+              >>> \case
+                (path, Just (PathItem{..})) -> do
+                  let prepareOp verb op =
+                        flip (maybe mempty) op $
+                          \(OperationObject resp) ->
+                            forM_ (M.toList resp) $
+                              second (responseLookup responses) >>> \case
+                                (sts, Just (Response{..})) ->
+                                  forM_ (M.toList content) $ \(mt, MediaTypeObject schema) ->
+                                    verb (Capture (sanitizePath path)) $ do
+                                      status (getStatus sts)
+                                      setHeader "Content-Type" (TL.fromStrict mt)
+                                      case (schemaLookup schemas schema) of
+                                        Just s -> do
+                                          jsonFromSchema s >>= json
+                                        Nothing -> fail "invalid schema"
+                                (_, Nothing) -> mempty
 
-        forM_ (M.toList pc) $ \(path, PathConfig{..}) -> do
-          let addroute' = maybe matchAny (addroute . unMethod) responseMethod
-          addroute' (fromString path) $ do
-            sequenceA_ $
-              catMaybes
-                [ liftIO . threadDelay <$> responseDelay
-                , status . unStatus <$> responseStatus
-                , traverse_ (uncurry addHeader) . M.toList <$> responseHeaders
-                , responseBody <&> \case
-                    String t -> text (TL.fromStrict t)
-                    v -> json v
-                ]
+                  prepareOp get getOp
+                  prepareOp put putOp
+                  prepareOp post postOp
+                  prepareOp delete deleteOp
+                  prepareOp options optionsOp
+                  prepareOp patch patchOp
+                  prepareOp (addroute TRACE) traceOp
+                  flip (maybe mempty) headOp $
+                    \(OperationObject resp) ->
+                      forM_ (M.toList resp) $
+                        second (responseLookup responses)
+                          >>> \case
+                            (sts, Just (Response{..})) ->
+                              forM_ (M.toList content) $ \(mt, _) ->
+                                (addroute HEAD) (Capture (sanitizePath path)) $ do
+                                  status (getStatus sts)
+                                  setHeader "Content-Type" (TL.fromStrict mt)
+                            (_, Nothing) -> mempty
+                (_, Nothing) -> mempty
+      PathConf paths -> do
+        scotty port $ do
+          mws
+
+          forM_ (M.toList paths) $ \(path, PathConfig{..}) -> do
+            let addroute' = maybe matchAny (addroute . unMethod) responseMethod
+            addroute' (fromString path) $ do
+              sequenceA_ $
+                catMaybes
+                  [ liftIO . threadDelay <$> responseDelay
+                  , status . unStatus <$> responseStatus
+                  , traverse_ (uncurry addHeader) . M.toList <$> responseHeaders
+                  , responseBody <&> \case
+                      String t -> text (TL.fromStrict t)
+                      v -> json v
+                  ]
 
 sanitizePath :: Text -> Text
 sanitizePath path = foldr (\m r -> T.replace m ((T.cons ':' . T.tail . T.init) m) r) path matches
