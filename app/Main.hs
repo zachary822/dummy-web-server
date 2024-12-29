@@ -20,6 +20,7 @@ import Data.String
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Lazy qualified as TL
+import Data.Vector qualified as V
 import Lib.Common.Types
 import Lib.OpenApi.Types as O
 import Lib.Path.Types
@@ -169,10 +170,13 @@ sanitizePath path = foldr (\m r -> T.replace m ((T.cons ':' . T.tail . T.init) m
   matches = (getAllTextMatches (path =~ ("\\{[^}]+\\}" :: Text)) :: [Text])
 
 chars :: [Char]
-chars = ['A' .. 'Z'] ++ ['a' .. 'z'] ++ ['0' .. '9']
+chars = [' '] ++ ['A' .. 'Z'] ++ ['a' .. 'z'] ++ ['0' .. '9']
 
-genItems :: (MonadIO m) => Int -> [a] -> m ([a])
-genItems n cs = replicateM n ((cs !!) <$> uniformRM (0, length cs - 1) globalStdGen)
+genItems :: (MonadIO m) => [a] -> Int -> m ([a])
+genItems cs n = replicateM n ((cs !!) <$> uniformRM (0, length cs - 1) globalStdGen)
+
+genString :: (MonadIO m) => m Value
+genString = String . T.pack <$> (uniformRM (1, 20) globalStdGen >>= genItems chars)
 
 jsonFromSchema :: SchemaObject -> IO Value
 jsonFromSchema (SchemaRef _) = fail "invalid reference"
@@ -184,11 +188,12 @@ jsonFromSchema (SchemaObject props) =
       )
       props
 jsonFromSchema (SchemaArray item) =
-  maybe (Array mempty) (Array . pure)
-    <$> traverse jsonFromSchema item
-jsonFromSchema SchemaString =
-  String . T.pack
-    <$> genItems 20 chars
+  maybe (Array mempty) (Array . V.fromList) <$> elements
+ where
+  elements =
+    uniformRM (1, 10) globalStdGen
+      >>= \n -> fmap sequenceA . replicateM n $ traverse jsonFromSchema item
+jsonFromSchema SchemaString = genString
 jsonFromSchema SchemaNull = return Null
 jsonFromSchema SchemaNumber = Number . fromFloatDigits <$> uniformDouble01M globalStdGen
 jsonFromSchema SchemaInteger = Number . (fromIntegral @Int) <$> uniformM globalStdGen
@@ -196,5 +201,5 @@ jsonFromSchema SchemaBoolean = Bool <$> uniformM globalStdGen
 jsonFromSchema (SchemaAnyOf schemas) = jsonFromSchema (N.head schemas)
 jsonFromSchema (SchemaOneOf schemas) = jsonFromSchema (N.head schemas)
 jsonFromSchema (SchemaAllOf schemas) = jsonFromSchema (N.head schemas)
-jsonFromSchema (SchemaNot SchemaNull) = String . T.pack <$> genItems 20 chars
+jsonFromSchema (SchemaNot SchemaNull) = genString
 jsonFromSchema (SchemaNot _) = return Null
