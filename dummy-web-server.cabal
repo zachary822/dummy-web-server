@@ -87,7 +87,9 @@ executable dummy-web-server
                       blaze-markup,
                       regex-tdfa,
                       random,
-                      vector
+                      vector,
+                      yaml,
+                      filepath
 
     -- Directories containing source files.
     hs-source-dirs:   app

@@ -21,6 +21,7 @@ import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Lazy qualified as TL
 import Data.Vector qualified as V
+import Data.Yaml qualified as Y
 import Lib.Common.Types
 import Lib.OpenApi.Types as O
 import Lib.Path.Types
@@ -30,6 +31,7 @@ import Network.HTTP.Types (StdMethod (HEAD, TRACE))
 import Network.Wai.Middleware.Cors
 import Network.Wai.Middleware.RequestLogger
 import Options.Applicative
+import System.FilePath
 import System.Random.Stateful
 import Text.Blaze.Html.Renderer.Utf8
 import Text.Regex.TDFA
@@ -69,6 +71,20 @@ configParser =
               )
         )
 
+parseConfig :: FilePath -> IO (ServerConfig, String)
+parseConfig p = do
+  unless (ext `elem` [".json", ".yaml", ".yml"]) $ fail "bad config file"
+
+  if ext == ".json"
+    then
+      eitherDecodeFileStrict p
+        >>= either fail (return . (,ext))
+    else
+      Y.decodeFileEither p
+        >>= either (fail . show) (return . (,ext))
+ where
+  ext = takeExtension p
+
 main :: IO ()
 main = do
   Config{..} <-
@@ -89,24 +105,32 @@ main = do
                   , corsOrigins = corsOrigins
                   }
 
-  eitherDecodeFileStrict configPath
-    >>= either fail return
+  parseConfig configPath
     >>= \case
-      OpenApiConf OpenApi{..} -> do
+      (OpenApiConf OpenApi{..}, ext) -> do
         let Components{..} = components
         unless
-          (openapi < Version (3, 2, 0) && openapi >= Version (3, 1, 0))
+          (openapi < Version (3, 2, 0) && openapi >= Version (3, 0, 0))
           (fail "unsupported openapi version")
 
         scotty port $ do
           mws
 
-          get "/openapi.json" $ do
-            setHeader "Content-Type" "application/json"
-            file configPath
-          get "/docs" $ do
-            setHeader "Content-Type" "text/html"
-            raw $ renderHtml (swaggerPage "/openapi.json")
+          if ext == ".json"
+            then do
+              get "/openapi.json" $ do
+                setHeader "Content-Type" "application/json"
+                file configPath
+              get "/docs" $ do
+                setHeader "Content-Type" "text/html"
+                raw $ renderHtml (swaggerPage "/openapi.json")
+            else do
+              get "/openapi.yaml" $ do
+                setHeader "Content-Type" "application/x-yaml"
+                file configPath
+              get "/docs" $ do
+                setHeader "Content-Type" "text/html"
+                raw $ renderHtml (swaggerPage "/openapi.yaml")
 
           forM_ (M.toList paths) $
             second (pathLookup pathItems)
@@ -147,7 +171,7 @@ main = do
                                   setHeader "Content-Type" (TL.fromStrict mt)
                             (_, Nothing) -> mempty
                 (_, Nothing) -> mempty
-      PathConf paths -> do
+      (PathConf paths, _) -> do
         scotty port $ do
           mws
 
