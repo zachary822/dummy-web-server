@@ -1,10 +1,12 @@
 {-# LANGUAGE DuplicateRecordFields #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Lib.OpenApi.Types where
 
 import Control.Applicative
+import Control.Lens
 import Data.Aeson
 import Data.Aeson.Types (Parser)
 import Data.Either
@@ -18,9 +20,9 @@ import Lib.Common.Types
 import Network.HTTP.Types (Status, ok200)
 
 data OpenApi = OpenApi
-  { openapi :: Version
-  , paths :: M.Map Text PathItemObject
-  , components :: Components
+  { _openapi :: Version
+  , _paths :: M.Map Text PathItemObject
+  , _components :: Components
   }
   deriving (Generic, Show, Eq)
 
@@ -242,3 +244,5 @@ data Ref = Ref
 instance FromJSON Ref where
   parseJSON = withObject "ref" $ \o ->
     Ref <$> o .: "$ref"
+
+makeLenses ''OpenApi

@@ -89,7 +89,8 @@ executable dummy-web-server
                       random,
                       vector,
                       yaml,
-                      filepath
+                      filepath,
+                      lens
 
     -- Directories containing source files.
     hs-source-dirs:   app
