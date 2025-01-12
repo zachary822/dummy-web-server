@@ -9,7 +9,7 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Data.Aeson
 import Data.Aeson.Key (fromText)
-import Data.Foldable (sequenceA_, traverse_)
+import Data.Foldable (for_, sequenceA_, traverse_)
 import Data.List.NonEmpty qualified as N
 import Data.Map.Strict qualified as M
 import Data.Maybe (catMaybes, fromMaybe)
@@ -123,16 +123,16 @@ main = do
                 setHeader "Content-Type" "text/html"
                 raw $ renderHtml (swaggerPage "/openapi.yaml")
 
-          forM_ (api ^. paths . to M.toList & traverse . _2 %~ pathLookup pathItems) $
+          for_ (api ^. paths . to M.toList & traverse . _2 %~ pathLookup pathItems) $
             \case
               (path, Just (PathItem{..})) -> do
                 let prepareOp verb o =
                       flip (maybe mempty) o $
                         \(OperationObject resp) ->
-                          forM_ (resp ^. to M.toList & traverse . _2 %~ responseLookup responses) $
+                          for_ (resp ^. to M.toList & traverse . _2 %~ responseLookup responses) $
                             \case
                               (sts, Just (Response{..})) ->
-                                forM_ (M.toList content) $ \(mt, MediaTypeObject schema) ->
+                                for_ (M.toList content) $ \(mt, MediaTypeObject schema) ->
                                   verb (Capture (sanitizePath path)) $ do
                                     status (getStatus sts)
                                     setHeader "Content-Type" (TL.fromStrict mt)
@@ -151,10 +151,10 @@ main = do
                 prepareOp (addroute TRACE) traceOp
                 flip (maybe mempty) headOp $
                   \(OperationObject resp) ->
-                    forM_ (resp ^. to M.toList & traverse . _2 %~ responseLookup responses) $
+                    for_ (resp ^. to M.toList & traverse . _2 %~ responseLookup responses) $
                       \case
                         (sts, Just (Response{..})) ->
-                          forM_ (M.toList content) $ \(mt, _) ->
+                          for_ (M.toList content) $ \(mt, _) ->
                             (addroute HEAD) (Capture (sanitizePath path)) $ do
                               status (getStatus sts)
                               setHeader "Content-Type" (TL.fromStrict mt)
@@ -164,7 +164,7 @@ main = do
         scotty _port $ do
           mws
 
-          forM_ (M.toList ps) $ \(path, PathConfig{..}) -> do
+          for_ (M.toList ps) $ \(path, PathConfig{..}) -> do
             let addroute' = maybe matchAny (addroute . unMethod) responseMethod
             addroute' (fromString path) $ do
               sequenceA_ $

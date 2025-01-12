@@ -19,20 +19,6 @@ import GHC.Generics (Generic)
 import Lib.Common.Types
 import Network.HTTP.Types (Status, ok200)
 
-data OpenApi = OpenApi
-  { _openapi :: Version
-  , _paths :: M.Map Text PathItemObject
-  , _components :: Components
-  }
-  deriving (Generic, Show, Eq)
-
-instance FromJSON OpenApi where
-  parseJSON = withObject "OpenApi" $ \o ->
-    OpenApi
-      <$> o .: "openapi"
-      <*> o .: "paths"
-      <*> (maybe mempty id <$> o .:? "components")
-
 newtype Version = Version (Int, Int, Int) deriving (Generic, Show, Eq, Ord)
 
 instance FromJSON Version where
@@ -244,5 +230,19 @@ data Ref = Ref
 instance FromJSON Ref where
   parseJSON = withObject "ref" $ \o ->
     Ref <$> o .: "$ref"
+
+data OpenApi = OpenApi
+  { _openapi :: Version
+  , _paths :: M.Map Text PathItemObject
+  , _components :: Components
+  }
+  deriving (Generic, Show, Eq)
+
+instance FromJSON OpenApi where
+  parseJSON = withObject "OpenApi" $ \o ->
+    OpenApi
+      <$> o .: "openapi"
+      <*> o .: "paths"
+      <*> (maybe mempty id <$> o .:? "components")
 
 makeLenses ''OpenApi
